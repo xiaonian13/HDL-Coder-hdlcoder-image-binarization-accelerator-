@@ -1,0 +1,20 @@
+function [pixel_out, valid_out] = img_threshold(pixel_in, valid_in, threshold)
+% #codegen 告诉 MATLAB 这个函数是要准备转成 C/C++ 或 HDL 的
+% pixel_in: 输入的像素值 (0-255)
+% valid_in: 输入有效信号 (boolean)
+% threshold: 二值化阈值
+
+    % 初始化输出
+    pixel_out = uint8(0);
+    valid_out = false;
+
+    % 只有当输入像素有效时，才进行处理
+    if valid_in
+        if pixel_in >= threshold
+            pixel_out = uint8(255); % 超过阈值变白
+        else
+            pixel_out = uint8(0);   % 低于阈值变黑
+        end
+        valid_out = true;
+    end
+end
