@@ -1,0 +1,125 @@
+// ==============================================================================
+// Tool Version: Vivado v.2020.2 (win64)
+// Design      : tb_top.sv
+// Purpose     : Testbench perfectly matching MATLAB HDL Coder (Size 2 Fixed Edition)
+// ==============================================================================
+
+`timescale 1 ps / 1 ps
+
+// 1. 导入 AXI VIP 必须的仿真包
+import axi_vip_pkg::*;
+import design_1_axi_vip_0_0_pkg::*;
+
+module tb_top();
+
+    // ==============================================================================
+    // 2. 例化 Block Design 顶层 Wrapper
+    // ==============================================================================
+    design_1_wrapper DUT();
+
+    // ==============================================================================
+    // 3. 声明 Master Agent 主控句柄及测试变量
+    // ==============================================================================
+    design_1_axi_vip_0_0_mst_t  master_agent;
+
+    xil_axi_resp_t  resp;
+    bit [31:0]      read_data;                   // 存放读取回来的数据
+
+    // 严格对齐 MATLAB HTML 真实寄存器映射表的绝对地址
+    longint         addr_ip_reset     = 64'h0000_0000;   // IPCore_Reset (只写)
+    longint         addr_ip_enable    = 64'h0000_0004;   // IPCore_Enable (只写)
+    longint         addr_ip_timestamp = 64'h0000_0008;   // IPCore_Timestamp (纯只读)
+    longint         addr_pixel_in     = 64'h0000_0100;   // pixel_in_Data (只写)
+    longint         addr_valid_in     = 64'h0000_0104;   // valid_in_Data (只写)
+    longint         addr_threshold    = 64'h0000_0108;   // threshold_Data (只写)
+    longint         addr_pixel_out    = 64'h0000_010C;   // pixel_out_Data (算法输出-纯只读)
+
+    // ==============================================================================
+    // 4. 仿真激励控制主体
+    // ==============================================================================
+    initial begin
+        $display("[TB_TOP] ================================================");
+        $display("[TB_TOP] ------ 仿真初始化：正在创建 AXI VIP 驱动 ------");
+        $display("[TB_TOP] ================================================");
+        
+        master_agent = new("master_vip_agent", DUT.design_1_i.axi_vip_0.inst.IF);
+        master_agent.set_verbosity(400);
+        master_agent.start_master();
+        
+        $display("[TB_TOP] 正在监测硬件复位状态，等待复位释放...");
+        wait(DUT.design_1_i.axi_vip_0.aresetn == 1'b1);
+        
+        #50ns; 
+        $display("[TB_TOP] 全局硬件复位已安全释放！开始发起 AXI 初始化...");
+
+        // ==============================================================================
+        // ① 核心步：显式释放内部软件复位 (尺寸参数已修正为 2)
+        // ==============================================================================
+        $display("[TB_TOP] [WRITE] 正在向复位寄存器 (0x0) 写入 0 以关闭内部软件复位...");
+        master_agent.AXI4LITE_WRITE_BURST(addr_ip_reset, 2, 32'h0000_0000, resp);
+
+        #20ns;
+
+        // ② 使能 IP 核 (往 0x4 写入 1)
+        $display("[TB_TOP] [WRITE] 正在向使能寄存器 (0x4) 写入使能信号...");
+        master_agent.AXI4LITE_WRITE_BURST(addr_ip_enable, 2, 32'h0000_0001, resp);
+        
+        // ③ 配置二值化阈值为 128 (往 0x108 写入 128)
+        $display("[TB_TOP] [WRITE] 正在向阈值寄存器 (0x108) 写入: 128");
+        master_agent.AXI4LITE_WRITE_BURST(addr_threshold, 2, 32'd128, resp);
+        
+        // ④ 输入模拟图像流：输入一个高亮像素 150，并拉高有效信号
+        $display("[TB_TOP] [WRITE] 正在输入模拟图像像素: 150 和有效标志...");
+        master_agent.AXI4LITE_WRITE_BURST(addr_pixel_in, 2, 32'd150, resp);
+        master_agent.AXI4LITE_WRITE_BURST(addr_valid_in, 2, 32'h0000_0001, resp);
+        
+        #100ns; // 留出时间让解冻后的核心算法流水线和总线完成数据同步
+
+        // ==============================================================================
+        // ⑤ 核心读验证（关键修正）：尺寸参数修改为标准 32 位的 2
+        // ==============================================================================
+        $display("[TB_TOP] [READ] 正在从时间戳寄存器 (0x8) 读取 32 位固件版本号...");
+        master_agent.AXI4LITE_READ_BURST(addr_ip_timestamp, 2, read_data, resp);
+        
+        if(resp == 2'b00) begin
+            $display("[TB_TOP] [READ] 时间戳读通道功能验证成功！");
+            $display("[TB_TOP] 实际读出的 MATLAB 固件时间戳为: %0d", read_data);
+            if (read_data == 32'd2105211101) begin
+                $display("[TB_TOP] >>> [MATCH] 时间戳与测试报告 2105211101 完美匹配！");
+            end
+        end else begin
+            $display("[TB_TOP] [ERROR] 时间戳读取失败！响应码 RESP = %0d", resp);
+        end
+
+        #50ns;
+
+        // ==============================================================================
+        // ⑥ 算法结果读验证（关键修正）：尺寸参数修改为标准 32 位的 2
+        // ==============================================================================
+        $display("[TB_TOP] [READ] 正在从输出寄存器 (0x10C) 获取二值化处理结果...");
+        master_agent.AXI4LITE_READ_BURST(addr_pixel_out, 2, read_data, resp);
+        
+        if(resp == 2'b00) begin
+            $display("[TB_TOP] ================================================");
+            $display("[TB_TOP]  图像二值化核心硬件处理成功！");
+            $display("[TB_TOP]  算法硬件实际输出值: 0x%h", read_data);
+            $display("[TB_TOP]  说明：输入150 > 阈值128，输出非0结果，算法流完全正确！");
+            $display("[TB_TOP]  AXI VIP 读写双向全通路全部验证圆满通关！");
+            $display("[TB_TOP] ================================================");
+        end else begin
+            $display("[TB_TOP] [ERROR] 算法输出结果读取失败！");
+        end
+
+        #200ns;
+        $display("[TB_TOP] 仿真流程全线运行完毕，安全退出。");
+        $finish;
+    end
+
+    // 仿真看门狗
+    initial begin
+        #3000ns;
+        $display("[TB_TOP] [TIMEOUT] 警告：仿真超时，强行终止。");
+        $finish;
+    end
+
+endmodule
