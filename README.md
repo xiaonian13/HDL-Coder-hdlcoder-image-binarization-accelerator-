@@ -12,13 +12,13 @@
 - 系统环境：Windows11
 
 ### 项目目录结构
-├── matlab_sim/ # Matlab 算法源码与仿真脚本
-├── hls_code/ # HLS 硬件可综合代码
-├── vivado_project/ # Vivado 工程文件
-├── data/ # 测试数据集、输入输出数据
-├── doc/ # 设计文档、流程图、实验报告
-├── result/ # 仿真结果、加速性能测试数据
-└── README.md # 项目说明文档
+- matlab_sim/ # Matlab 算法源码与仿真脚本
+- hls_code/ # HLS 硬件可综合代码
+- vivado_project/ # Vivado 工程文件
+- data/ # 测试数据集、输入输出数据
+- doc/ # 设计文档、流程图、实验报告
+- result/ # 仿真结果、加速性能测试数据
+- README.md # 项目说明文档
 
 ### 使用教程
 1. **Matlab算法验证**
